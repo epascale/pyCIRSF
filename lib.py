@@ -265,6 +265,48 @@ def stacking(ima, xc, yc, N = 31, remove_background=True):
     
     return stamp, light_baricenter_x, light_baricenter_y
 
+def barycenter(image):
+    """
+    This function will calculate the lightbarycenter and the expected values of
+    x**2, y**2, x**3 and y**3 for a given input image (or stamp).
+    """
+
+    # Pixel values covering range of stamp
+    xx = np.arange(image.shape[1])
+    yy = np.arange(image.shape[0])
+    
+    # Need x-coords of every pixel 
+    pointsx = np.zeros(len(xx)**2)
+    for i in xx:
+        g = i*len(xx)
+        pointsx[g:g+len(xx)] = i
+    
+    # Need y-coords of every pixel (needs to correspond to order of x)
+    pointsy = np.zeros(len(yy)**2)
+    for j in yy:
+        h = j*len(xx)
+        pointsy[h:h+len(xx)] = yy
+    
+    # Need to flatten image   
+    data = image.flatten()
+    
+    # Need two columns, not two rows
+    points = np.transpose(np.array([pointsx, pointsy]))
+    
+    # Light barycenter       
+    lbx = ((data*pointsx).sum()) / (data.sum())
+    lby = ((data*pointsy).sum()) / (data.sum())
+    
+    # Expected value for variance
+    xsqu = ((data*(pointsx**2)).sum()) / (data.sum())
+    ysqu = ((data*(pointsy**2)).sum()) / (data.sum())
+    
+    # Expected value for asymmetry
+    xcub = ((data*(pointsx**3)).sum()) / (data.sum())
+    ycub = ((data*(pointsy**3)).sum()) / (data.sum())     
+  
+    return lbx, lby, xsqu, ysqu, xcub, ycub 
+
 def photom(ima, pos, radius, r_in=False, r_out=False):
     '''
     Aperture photometry in an aperture located at pixel coordinates 
