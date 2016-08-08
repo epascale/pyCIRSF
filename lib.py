@@ -2,6 +2,7 @@ import numpy as np
 from astropy.io import ascii, fits
 from astropy.table import hstack, Table
 import astropy.coordinates as coord
+from astropy.stats import sigma_clip
 import astropy.units as u
 import scipy.interpolate
 from photutils import CircularAperture, aperture_photometry, \
@@ -19,18 +20,20 @@ def get_frames_flags(fname, date, object_name):
     
     ws = wb[date]
     
-    ws_frames = np.array([c.value for c in ws.columns[ 0]][1:])
-    ws_objects =         [c.value for c in ws.columns[ 1]][1:]
-    ws_itimes = np.array([c.value for c in ws.columns[ 2]][1:])
-    ws_ra_off = np.array([c.value for c in ws.columns[ 3]][1:])
-    ws_de_off = np.array([c.value for c in ws.columns[ 4]][1:])
-    ws_flags  = np.array([c.value for c in ws.columns[14]][1:])
+    ws_frames    = np.array([c.value for c in ws.columns[ 0]][1:])
+    ws_objects   =          [c.value for c in ws.columns[ 1]][1:]
+    ws_itimes    = np.array([c.value for c in ws.columns[ 2]][1:])
+    ws_ra_off    = np.array([c.value for c in ws.columns[ 3]][1:])
+    ws_de_off    = np.array([c.value for c in ws.columns[ 4]][1:])
+    ws_flags     = np.array([c.value for c in ws.columns[14]][1:])
+    ws_flags_new = np.array([c.value for c in ws.columns[15]][1:])
     
     list_ = []
     
     for i in xrange(len(ws_objects)):
-        if ws_objects[i] == object_name and np.int(ws_flags[i]) == 0:
-            list_.append([np.int(ws_frames[i]), ws_itimes[i], ws_ra_off[i], ws_de_off[i] ])
+	flag = np.int(ws_flags[i]) | np.int(ws_flags_new[i])
+        if ws_objects[i] == object_name and flag == 0:
+            list_.append([np.int(ws_frames[i]), ws_itimes[i], ws_ra_off[i], ws_de_off[i]])
         
     if list_:
         return Table([l for l in zip(*list_)], names=('Frame', 'ITIME', 'RA_OFF', 'DEC_OFF'))
@@ -77,19 +80,24 @@ def get_flat(fname, flag_mask = 0x1|0x4):
     if not os.path.exists(fname): pycirsf_error('Mask file ({:s}) does not exist'.format(fname))
     hdu = fits.open(fname)
     ima  = hdu[0].data
+    
+    ima = sigma_clip(ima, sigma = 5.0)
+    
     #mask = hdu[2].data
     hdu.close()
     
     #mask = np.bitwise_and(mask, flag_mask).astype(np.bool)
     
-    return np.ma.array(ima, mask=False)
+    return ima
     
-def apply_dark_flat(ima, dark=None, flat=None):
+def apply_dark_flat(ima, dark=None, flat=None, fillval = 0.0):
     
     ima_ = ima
     
     if isinstance(dark, np.ndarray) : ima_ = ima_ - dark
     if isinstance(flat, np.ndarray):  ima_ = ima_ / flat
+    
+    ima_.set_fill_value(fillval)
     
     return ima_
  
@@ -230,10 +238,7 @@ def stacking(ima, xc, yc, N = 31, remove_background=True):
     '''
     
     ima_ = ima.copy()
-    idx = np.where(np.isnan(ima_))
-    ima_[idx] = 0.0
 
-    stamp = np.zeros( (N, N) )
     stamp = []
     for xx, yy in zip(xc, yc):
         xx_ = np.int(xx); yy_ = np.int(yy)
