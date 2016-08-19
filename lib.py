@@ -270,6 +270,38 @@ def stacking(ima, xc, yc, N = 31, remove_background=True):
     
     return stamp, light_baricenter_x, light_baricenter_y
 
+def stacking_nolb(ima, xc, yc, N = 31, remove_background=False):
+    '''
+    Stack the input image at locations xc, yc. 
+    The stack image has shape NxN. 
+    If remove_background is true, a background estimated in a rectangular annulus and removed.
+    
+    '''
+    
+    ima_ = ima.copy()
+
+    stamp = []
+    for xx, yy in zip(xc, yc):
+        xx_ = np.int(xx); yy_ = np.int(yy)
+        stamp.append( ima_[-N//2+1+yy_:N//2+1+yy_, -N//2+1+xx_:N//2+1+xx_] )
+                
+    stamp = np.ma.array(stamp).mean(axis=0)
+    
+    if remove_background:
+        anulus_apertures = RectangularAnnulus(
+            (stamp.shape[1]/2, stamp.shape[0]/2), 
+            w_out=stamp.shape[0], h_out=stamp.shape[1],
+            w_in=0.8*stamp.shape[0], theta=0.0)
+        
+        bkg = aperture_photometry(stamp, anulus_apertures)
+        bkg['aperture_sum'] /= anulus_apertures.area()
+        stamp -= bkg['aperture_sum']
+        
+    
+    stamp /= stamp.sum()
+    
+    return stamp
+
 def barycenter(image):
     """
     This function will calculate the lightbarycenter and the expected values of
@@ -319,28 +351,55 @@ def photom(ima, pos, radius, r_in=False, r_out=False):
     When r_in and r_out are given, background is estimated in CircularAnnulus and subtracted.
 
     '''
-    apertures = CircularAperture(pos, r = radius)
     
     if hasattr(ima, 'mask'):
         mask = ima.mask
     else:
-        mask = None 
+        mask = np.zeros(ima.shape, dtype=np.bool)
     
-    ap = aperture_photometry(ima, apertures, mask=mask)
+    apertures = CircularAperture(pos, r = radius)
+    ap  = aperture_photometry(ima, apertures, mask=mask)
+    apm = aperture_photometry(mask.astype(int), apertures)
     
     bkg = False
     if (r_in and r_out):
         anulus_apertures = CircularAnnulus(pos, r_in=r_in, r_out=r_out)
-        bkg = aperture_photometry(ima, anulus_apertures, mask=mask)
+        bkg  = aperture_photometry(ima, anulus_apertures, mask=mask)
+        bkgm = aperture_photometry(mask.astype(int), anulus_apertures)
+        
+
+        mbkg_area = bkgm['aperture_sum']  # Number of masked pixels in bkg
+        map_area  = apm['aperture_sum']   # Number of masked pixels in aperture
+        
+        # Number of non-masked pixels in aperture and bkg        
+        bkg_area  = anulus_apertures.area() - bkgm['aperture_sum']
+        ap_area   = apertures.area() - apm['aperture_sum']
+            
+        # Average bkg
+        bkg['aperture_sum'] = bkg['aperture_sum']/bkg_area
+        
+        # Bkg subtracted flux
+        flux = ap['aperture_sum']-bkg['aperture_sum']*ap_area
+        
+        flux.name      = 'flux'
         bkg.rename_column('aperture_sum', 'background')
-        bkg['background'] = bkg['background']*apertures.area()/anulus_apertures.area()
+        map_area.name  = 'bpix_aper'
+        mbkg_area.name = 'bpix_bkg'
+        ap_area.name   = 'area_aper'
+        bkg_area.name  = 'area_bkg'
+        
+        #bkg.rename_column('aperture_sum', 'background')
+        
         ap.add_column(bkg['background'])
-        flux = ap['aperture_sum']-ap['background']
-        flux.name = 'flux'
+        ap.add_column(map_area)
+        ap.add_column(mbkg_area)
+        ap.add_column(ap_area)
+        ap.add_column(bkg_area)
+        
+        
         ap.add_column(flux)
         
     return ap['flux'], ap
-
 
 
 class Formatter(object):
