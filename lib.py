@@ -312,23 +312,20 @@ def barycenter(image):
     xx = np.arange(image.shape[1])
     yy = np.arange(image.shape[0])
     
-    # Need x-coords of every pixel 
-    pointsx = np.zeros(len(xx)**2)
+    # Need y-coords of every pixel 
+    pointsy = np.zeros(len(xx)**2)
     for i in xx:
         g = i*len(xx)
-        pointsx[g:g+len(xx)] = i
+        pointsy[g:g+len(xx)] = i
     
-    # Need y-coords of every pixel (needs to correspond to order of x)
-    pointsy = np.zeros(len(yy)**2)
+    # Need x-coords of every pixel (needs to correspond to order of y)
+    pointsx = np.zeros(len(yy)**2)
     for j in yy:
         h = j*len(xx)
-        pointsy[h:h+len(xx)] = yy
+        pointsx[h:h+len(xx)] = yy
     
     # Need to flatten image   
     data = image.flatten()
-    
-    # Need two columns, not two rows
-    points = np.transpose(np.array([pointsx, pointsy]))
     
     # Light barycenter       
     lbx = ((data*pointsx).sum()) / (data.sum())
