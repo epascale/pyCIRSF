@@ -229,7 +229,7 @@ def stacking_(ima, xc, yc, N = 31, remove_background=True):
     
     return stamp, light_baricenter_x, light_baricenter_y
 
-def stacking(ima, xc, yc, N = 31, remove_background=True):
+def stacking(ima, xc, yc, N = 31, remove_background=True, method='mean'):
     '''
     Stack the input image at locations xc, yc. 
     The stack image has shape NxN. 
@@ -242,10 +242,17 @@ def stacking(ima, xc, yc, N = 31, remove_background=True):
     stamp = []
     for xx, yy in zip(xc, yc):
         xx_ = np.int(xx); yy_ = np.int(yy)
-        stamp.append( ima_[-N//2+1+yy_:N//2+1+yy_, -N//2+1+xx_:N//2+1+xx_] )
-                
-    stamp = np.ma.array(stamp).mean(axis=0)
+        stamp_ = ima_[-N//2+1+yy_:N//2+1+yy_, -N//2+1+xx_:N//2+1+xx_]
+        if stamp_.shape[0] == N and stamp_.shape[1] == N :
+	  stamp.append( stamp_ )
     
+    if method=='mean':
+      stamp = np.ma.array(stamp).mean(axis=0)
+    elif method=='median':
+      stamp = np.ma.median(np.ma.array(stamp), axis=0)
+    else:
+      pycirsf_error('Stacking: method not valid')
+      
     if remove_background:
         anulus_apertures = RectangularAnnulus(
             (stamp.shape[1]/2, stamp.shape[0]/2), 
@@ -350,6 +357,9 @@ def photom(ima, pos, radius, r_in=False, r_out=False):
     '''
     
     if hasattr(ima, 'mask'):
+      if ima.mask.size == 1:
+	mask = np.zeros(ima.shape, dtype=np.bool) | ima.mask
+      else:
         mask = ima.mask
     else:
         mask = np.zeros(ima.shape, dtype=np.bool)
