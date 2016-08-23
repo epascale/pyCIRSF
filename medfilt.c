@@ -82,7 +82,7 @@ static PyObject *medfilt2d(PyObject *self, PyObject *args)
     unsigned char *mask;
     int wy, wx, offs_x, offs_y, step;
     int ny, nx, dims[2];
-    int i, j, x, y, n;
+    int i, j, x, y, n, idx;
     
     /* Parse tuples separately since args will differ between C fcns */
     
@@ -103,44 +103,25 @@ static PyObject *medfilt2d(PyObject *self, PyObject *args)
     cout = PyArray_DATA(matout);
     mask = PyArray_DATA(maskin);
     
-    //wx |= 1; // make sure window has odd dimensions
-    //wy |= 1;
     buf = malloc(wx*wy*sizeof(*buf));
     offs_x = wx/2; offs_y = wy/2;
-    printf("%d %d \n", offs_x, offs_y);
-    /*
-    for (i = 0; i < ny-wy; i++) {
-        n = 0;
-        for (y = 0; y < wy; y++) {
-            for (x = 0; x < wx; x++) {
-                buf[n++] = cin[(y+i)*ny+x];
-            }
-        }
-        
-        for (j = 1; j < nx-wx; j++) {
-            for (y = 0; y < wy; y++) {
-                buf
-                buf[y*wy+x] = cin[(y+i)*ny+x];
-            
-            }
-        }
-    }
-    */
-    for (i = offs_y; i < ny-offs_y; i+=step) {
-        for (j = offs_x; j < nx-offs_x; j+=step) {
+    
+    for (i = 0; i < ny; i+=step) {
+        for (j = 0; j < nx; j+=step) {
+	    //if (mask[i*nx + j]) continue;
             for (n = 0, y = i - offs_y; y < i-offs_y+wy; y++) {
                 for (x = j - offs_x; x < j-offs_x+wx; x++) {
-                    if (mask[y*ny+x]) continue;
-                    buf[n++] = cin[y*nx+x];
-                    //printf("%f ", cin[y*nx+x]);
+                    if (x < 0 || x >= nx || y < 0 || y >= ny) continue;
+		    idx = y*nx+x;
+                    if (mask[idx]) continue;
+                    buf[n] = cin[idx]; n++;
                 }
-                
             }
-            //printf(" - %d %d ", i, j);
-            cout[i*nx + j] = nr_select(n/2+1, n, buf-1);
-            //printf(" - %f \n", cout[i*nx + j]);
-            
-            
+            if (n < 3) {
+	      cout[i*nx + j] = INFINITY;
+	    } else {
+	      cout[i*nx + j] = nr_select(n/2+1, n, buf-1);
+	    } 
         }
     }
     

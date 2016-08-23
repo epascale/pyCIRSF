@@ -1,32 +1,65 @@
 import numpy as np
-from scipy.interpolate import interp2d
+from scipy.interpolate import interp2d, RectBivariateSpline
 import medfilt
 
 
 
 
+
 def medfilt2d(ima, mask=None, wy = 3, wx = 3, step = 1, kind='cubic'):
-    if not mask: mask = np.zeros(ima.shape, dtype=np.bool)
     
+    _ima = ima.copy()
+    if  mask is None: 
+      _mask = np.zeros(_ima.shape, dtype=np.bool)
+    else:
+      _mask = mask.copy()
+      
     if step <= 0: raise ValueError('invalid step value')
-    
-    ima_med = medfilt.medfilt2d(ima, mask, wy, wx, step)
-    
-    if step == 1: return ima_med
+    ima_med = medfilt.medfilt2d(_ima, _mask, wy, wx, step)
+    if mask is None and step == 1: return ima_med
     
     # Interpolate over gaps using optimal interpolation
-    idx0 = np.arange(0, ima.shape[0])
-    idx1 = np.arange(0, ima.shape[1])
+    idx0 = np.arange(0, _ima.shape[0])
+    idx1 = np.arange(0, _ima.shape[1])
     
-    print ima_med.shape, idx0.shape, idx0[::step].shape
-    fp = interp2d(idx0[::step], idx1[::step], ima_med[::step,::step], kind=kind)
+    #fp = RectBivariateSpline(idx1[::step], idx0[::step], ima_med[::step,::step])
+    fp = interp2d(idx1[::step], idx0[::step], ima_med[::step,::step], kind=kind)
     
-    return fp(idx0, idx1)
+    return fp(idx1, idx0)
 
-    
+def remove_background(ima, source_x=None, source_y=None, source_r=None, wx=64, wy=64, step=8):
+  
+    _ima = ima.copy()
 
-
+    if hasattr(_ima, 'mask'):
+      if _ima.mask.size == 1:
+	_mask = np.zeros(ima.shape, dtype=np.bool) | ima.mask
+	_ima = np.ma.array(_ima, mask=_mask)
+    else:
+	_mask = np.zeros(ima.shape, dtype=np.bool)
+	_ima = np.ma.array(_ima, mask=_mask)
     
+    print (source_x is None or source_y is None or source_r is None)
+    if not (source_x is None or source_y is None or source_r is None):
+      print 'heeeeereeee'
+      source_mask = np.zeros( _ima.shape, dtype=bool )
+      
+      for x, y in zip(np.round(source_x).astype(int), np.round(source_y).astype(int)):
+	source_mask[y - source_r:y+source_r+1,x - source_r:x+source_r+1] = True
+	_ima.mask |= source_mask
+    
+      
+    nx = ima.shape[1]
+    bkg1 = medfilt2d(_ima.filled()[..., :nx//2], mask=_ima.mask[..., :nx//2], 
+					wx=wx, wy=wy, step=step)
+    bkg2 = medfilt2d(_ima.filled()[..., nx//2:], mask=_ima.mask[..., nx//2:], 
+					wx=wx, wy=wy, step=step)
+
+    background = np.ma.array(np.hstack( (bkg1, bkg2) ), 
+			      mask=ima.mask,
+			      fill_value=ima.fill_value) 
+    return ima-background, background
+  
 
 if __name__ == '__main__':
     
