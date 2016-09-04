@@ -39,9 +39,7 @@ def remove_background(ima, source_x=None, source_y=None, source_r=None, wx=64, w
 	_mask = np.zeros(ima.shape, dtype=np.bool)
 	_ima = np.ma.array(_ima, mask=_mask)
     
-    print (source_x is None or source_y is None or source_r is None)
     if not (source_x is None or source_y is None or source_r is None):
-      print 'heeeeereeee'
       source_mask = np.zeros( _ima.shape, dtype=bool )
       
       for x, y in zip(np.round(source_x).astype(int), np.round(source_y).astype(int)):

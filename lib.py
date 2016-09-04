@@ -1,6 +1,6 @@
 import numpy as np
 from astropy.io import ascii, fits
-from astropy.table import hstack, Table
+from astropy.table import hstack, Table, Column
 import astropy.coordinates as coord
 from astropy.stats import sigma_clip
 import astropy.units as u
@@ -348,11 +348,22 @@ def barycenter(image):
   
     return lbx, lby, xsqu, ysqu, xcub, ycub 
 
-def photom(ima, pos, radius, r_in=False, r_out=False):
+def moments(image):
+  
+  norm = 1.0/image.sum()
+  xc = np.sum(image * np.arange(image.shape[1]))*norm
+  yc = np.sum(image.transpose() * np.arange(image.shape[0]))*norm
+     
+  return yc, xc
+
+def photom(ima, pos, radius, r_in=False, r_out=False, mode='median'):
     '''
     Aperture photometry in an aperture located at pixel coordinates 
     pos = ( (x0, y0), (x1, y1), ... ) with a radius=radius.
     When r_in and r_out are given, background is estimated in CircularAnnulus and subtracted.
+    
+    mode refers to how the background is estimated within the circlar annulus.
+    Can be 'median' or 'mean'
 
     '''
     
@@ -360,51 +371,58 @@ def photom(ima, pos, radius, r_in=False, r_out=False):
       if ima.mask.size == 1:
 	mask = np.zeros(ima.shape, dtype=np.bool) | ima.mask
       else:
-        mask = ima.mask
+        mask = ima.mask.copy()
     else:
         mask = np.zeros(ima.shape, dtype=np.bool)
     
     apertures = CircularAperture(pos, r = radius)
-    ap  = aperture_photometry(ima, apertures, mask=mask)
-    apm = aperture_photometry(mask.astype(int), apertures)
+    ap        = aperture_photometry(ima, apertures, mask=mask)
+    apm       = aperture_photometry(mask.astype(int), apertures)
     
+    map_area  = Column(name='bpix_aper', data= apm['aperture_sum'].data)   # Number of masked pixels in aperture
+    
+    ap_area   = Column(name = 'area_aper',
+			    data=apertures.area() - apm['aperture_sum'].data)
+    flux      = Column(name = 'flux', data=ap['aperture_sum'].data)
+        
     bkg = False
-    if (r_in and r_out):
-        anulus_apertures = CircularAnnulus(pos, r_in=r_in, r_out=r_out)
-        bkg  = aperture_photometry(ima, anulus_apertures, mask=mask)
-        bkgm = aperture_photometry(mask.astype(int), anulus_apertures)
+    if ( r_in and r_out and mode in ('mean', 'median') ):
+      anulus_apertures = CircularAnnulus(pos, r_in=r_in, r_out=r_out)
+      bkgm = aperture_photometry(mask.astype(int), anulus_apertures)
+      mbkg_area = Column(name = 'bpix_bkg',
+			 data=bkgm['aperture_sum'])  # Number of masked pixels in bkg
+      # Number of non-masked pixels in aperture and bkg        
+      bkg_area  = Column(name = 'area_bkg',
+			 data=anulus_apertures.area() - bkgm['aperture_sum'])
+      ap.add_column(bkg_area)
+      ap.add_column(mbkg_area)
+      
+      if mode == 'mean':
+	bkg  = aperture_photometry(ima, anulus_apertures, mask=mask)
         
-
-        mbkg_area = bkgm['aperture_sum']  # Number of masked pixels in bkg
-        map_area  = apm['aperture_sum']   # Number of masked pixels in aperture
-        
-        # Number of non-masked pixels in aperture and bkg        
-        bkg_area  = anulus_apertures.area() - bkgm['aperture_sum']
-        ap_area   = apertures.area() - apm['aperture_sum']
-            
         # Average bkg
-        bkg['aperture_sum'] = bkg['aperture_sum']/bkg_area
+        bkga = Column(name='background',
+		      data=bkg['aperture_sum']/bkg_area)
         
         # Bkg subtracted flux
-        flux = ap['aperture_sum']-bkg['aperture_sum']*ap_area
+        flux -= bkga*ap_area
         
-        flux.name      = 'flux'
-        bkg.rename_column('aperture_sum', 'background')
-        map_area.name  = 'bpix_aper'
-        mbkg_area.name = 'bpix_bkg'
-        ap_area.name   = 'area_aper'
-        bkg_area.name  = 'area_bkg'
-        
-        #bkg.rename_column('aperture_sum', 'background')
-        
-        ap.add_column(bkg['background'])
-        ap.add_column(map_area)
-        ap.add_column(mbkg_area)
-        ap.add_column(ap_area)
-        ap.add_column(bkg_area)
-        
-        
-        ap.add_column(flux)
+        ap.add_column(bkga)
+      elif mode == 'median':
+	fractions = anulus_apertures.get_fractions(ima, method='center')
+	
+	bkgm = np.zeros(fractions.shape[-1], dtype=np.float)
+	for i in xrange(bkgm.size):
+	  bmask = ~mask | fractions[..., i].astype(np.bool)
+	  bkgm[i] = np.median(ima[bmask])
+	
+	flux -= bkgm*ap_area
+	bkgm = Column(name = 'background', data = bkgm)
+	ap.add_column(bkgm)
+          
+    ap.add_column(ap_area)
+    ap.add_column(map_area)
+    ap.add_column(flux)
         
     return ap['flux'], ap
 
