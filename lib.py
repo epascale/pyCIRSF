@@ -410,8 +410,8 @@ def photom(ima, pos, radius, r_in=False, r_out=False, mode='median'):
         ap.add_column(bkga)
       elif mode == 'median':
 	fractions = anulus_apertures.get_fractions(ima, method='center')
-	
-	bkgm = np.zeros(fractions.shape[-1], dtype=np.float)
+	nbkg = fractions.shape[-1] if fractions.ndim == 3 else 1
+	bkgm = np.zeros(nbkg, dtype=np.float)
 	for i in xrange(bkgm.size):
 	  bmask = ~mask | fractions[..., i].astype(np.bool)
 	  bkgm[i] = np.median(ima[bmask])
