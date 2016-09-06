@@ -287,11 +287,20 @@ def stacking_nolb(ima, xc, yc, N = 31, remove_background=False):
     
     ima_ = ima.copy()
 
+    # Need to ensure that sources are not too close to edge
+    badx = [np.where((xc<N/2.) | (xc>np.shape(ima)[0] - N/2.))]
+    xc = np.delete(xc, badx)
+    yc = np.delete(yc, badx)
+    bady = [np.where((yc<N/2.) | (yc>np.shape(ima)[0] - N/2.))]
+    xc = np.delete(xc, bady)
+    yc = np.delete(yc, bady)
+
     stamp = []
     for xx, yy in zip(xc, yc):
-        xx_ = np.int(xx); yy_ = np.int(yy)
+        xx_ = np.int(xx)
+        yy_ = np.int(yy)
         stamp.append( ima_[-N//2+1+yy_:N//2+1+yy_, -N//2+1+xx_:N//2+1+xx_] )
-                
+    
     stamp = np.ma.array(stamp).mean(axis=0)
     
     if remove_background:
