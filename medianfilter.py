@@ -7,7 +7,7 @@ import medfilt
 
 
 def medfilt2d(ima, mask=None, wy = 3, wx = 3, step = 1, kind='cubic'):
-    
+    # Copy image and set up mask if none there
     _ima = ima.copy()
     if  mask is None: 
       _mask = np.zeros(_ima.shape, dtype=np.bool)
@@ -15,6 +15,7 @@ def medfilt2d(ima, mask=None, wy = 3, wx = 3, step = 1, kind='cubic'):
       _mask = mask.copy()
       
     if step <= 0: raise ValueError('invalid step value')
+    # Perform median filtering (reduces noise)
     ima_med = medfilt.medfilt2d(_ima, _mask, wy, wx, step)
     if mask is None and step == 1: return ima_med
     
@@ -23,12 +24,18 @@ def medfilt2d(ima, mask=None, wy = 3, wx = 3, step = 1, kind='cubic'):
     idx1 = np.arange(0, _ima.shape[1])
     
     #fp = RectBivariateSpline(idx1[::step], idx0[::step], ima_med[::step,::step])
+    
+    # Removing inf
+    idx = np.where(np.isinf(ima_med))
+    if idx: ima_med[idx] = 0.0
+    
+    # Interpolate over median filtering to model background
     fp = interp2d(idx1[::step], idx0[::step], ima_med[::step,::step], kind=kind)
     
     return fp(idx1, idx0)
 
 def remove_background(ima, source_x=None, source_y=None, source_r=None, wx=64, wy=64, step=8):
-  
+    # Make a copy of image and check for mask
     _ima = ima.copy()
 
     if hasattr(_ima, 'mask'):
@@ -46,13 +53,13 @@ def remove_background(ima, source_x=None, source_y=None, source_r=None, wx=64, w
 	source_mask[y - source_r:y+source_r+1,x - source_r:x+source_r+1] = True
 	_ima.mask |= source_mask
     
-      
+    # Model background by splitting image into two halves (L and R)  
     nx = ima.shape[1]
     bkg1 = medfilt2d(_ima.filled()[..., :nx//2], mask=_ima.mask[..., :nx//2], 
 					wx=wx, wy=wy, step=step)
     bkg2 = medfilt2d(_ima.filled()[..., nx//2:], mask=_ima.mask[..., nx//2:], 
 					wx=wx, wy=wy, step=step)
-
+    # Put halves back together
     background = np.ma.array(np.hstack( (bkg1, bkg2) ), 
 			      mask=ima.mask,
 			      fill_value=ima.fill_value) 
