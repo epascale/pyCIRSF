@@ -435,6 +435,14 @@ def photom(ima, pos, radius, r_in=False, r_out=False, mode='median'):
         
     return ap['flux'], ap
 
+# Find the nearest value to a number, return x and y 
+def find_nearest(ydata, xdata, yvalue):
+    # Trunkate ydata so that sigma value only considered before peak
+    trunk = np.argmax(ydata)
+    ydat = ydata[0:trunk]
+    idx = (np.abs(ydat-yvalue)).argmin()
+    return idx
+
 
 class Formatter(object):
     def __init__(self, im):
