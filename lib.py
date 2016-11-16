@@ -375,7 +375,7 @@ def photom(ima, pos, radius, r_in=False, r_out=False, mode='median'):
     Can be 'median' or 'mean'
 
     '''
-    
+    # Setting up the mask 
     if hasattr(ima, 'mask'):
       if ima.mask.size == 1:
 	mask = np.zeros(ima.shape, dtype=np.bool) | ima.mask
@@ -383,49 +383,68 @@ def photom(ima, pos, radius, r_in=False, r_out=False, mode='median'):
         mask = ima.mask.copy()
     else:
         mask = np.zeros(ima.shape, dtype=np.bool)
-    
+    ### Performing the actual photometry - identical for each method
+    # Setting up the aperture 
     apertures = CircularAperture(pos, r = radius)
+    # Aperture photometry on image
     ap        = aperture_photometry(ima, apertures, mask=mask)
+    # Aperture photometry on mask to see how many masked pixels are in the 
+    # aperture
     apm       = aperture_photometry(mask.astype(int), apertures)
-    
-    map_area  = Column(name='bpix_aper', data= apm['aperture_sum'].data)   # Number of masked pixels in aperture
-    
+    # Number of masked pixels in aperture
+    map_area  = Column(name='bpix_aper', data= apm['aperture_sum'].data)   
+    # Number of unmasked pixels in aperture
     ap_area   = Column(name = 'area_aper',
 			    data=apertures.area() - apm['aperture_sum'].data)
-    flux      = Column(name = 'flux', data=ap['aperture_sum'].data)
+    # Flux of pixels
+    flux_init      = Column(name = 'flux', data=ap['aperture_sum'].data)
         
     bkg = False
+    ### Two different modes for analysing the background
     if ( r_in and r_out and mode in ('mean', 'median') ):
+      ### This stuff is the same regardless of method
+      # Setting up the annulus
       anulus_apertures = CircularAnnulus(pos, r_in=r_in, r_out=r_out)
+      # Performing annulus photometry on the mask
       bkgm = aperture_photometry(mask.astype(int), anulus_apertures)
+      # Number of masked pixels in bkg
       mbkg_area = Column(name = 'bpix_bkg',
-			 data=bkgm['aperture_sum'])  # Number of masked pixels in bkg
+			 data=bkgm['aperture_sum'])  
       # Number of non-masked pixels in aperture and bkg        
       bkg_area  = Column(name = 'area_bkg',
 			 data=anulus_apertures.area() - bkgm['aperture_sum'])
+      # Adding this data to table
       ap.add_column(bkg_area)
       ap.add_column(mbkg_area)
       
+      ### This stuff is specific to the mean
       if mode == 'mean':
+	# Perform the annulus photometry on the image
 	bkg  = aperture_photometry(ima, anulus_apertures, mask=mask)
-        
-        # Average bkg
+        # Average bkg where this divides by only number of NONMASKED pixels
+        # as the aperture photometry ignores the masked pixels
         bkga = Column(name='background',
 		      data=bkg['aperture_sum']/bkg_area)
-        
         # Bkg subtracted flux
-        flux -= bkga*ap_area
-        
+        flux = flux_init - bkga*ap_area
+        # Adding that data
         ap.add_column(bkga)
       elif mode == 'median':
+	# Number of pixels in the annulus, a different method
 	fractions = anulus_apertures.get_fractions(ima, method='center')
 	nbkg = fractions.shape[-1] if fractions.ndim == 3 else 1
+	# Background mask
 	bkgm = np.zeros(nbkg, dtype=np.float)
-	for i in xrange(bkgm.size):
-	  bmask = ~mask | fractions[..., i].astype(np.bool)
-	  bkgm[i] = np.median(ima[bmask])
 	
-	flux -= bkgm*ap_area
+	if bkgm.size == 1:
+	  bmask = ~mask & fractions.astype(np.bool)
+	  bkgm[0] = np.median(ima[bmask])
+	else:	
+	  for i in xrange(bkgm.size):
+	    bmask = ~mask & fractions[..., i].astype(np.bool)
+	    bkgm[i] = np.median(ima[bmask])
+		
+	flux = flux_init - bkgm*ap_area
 	bkgm = Column(name = 'background', data = bkgm)
 	ap.add_column(bkgm)
           
@@ -433,7 +452,7 @@ def photom(ima, pos, radius, r_in=False, r_out=False, mode='median'):
     ap.add_column(map_area)
     ap.add_column(flux)
         
-    return ap['flux'], ap
+    return ap['flux'], ap, map_area
 
 # Find the nearest value to a number, return x and y 
 def find_nearest(ydata, xdata, yvalue):
