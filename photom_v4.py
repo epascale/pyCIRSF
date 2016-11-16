@@ -87,7 +87,7 @@ for fr in fr_tab['Frame'][:1]:
     radii = np.linspace(1, 50, 40)
     flux = []
     for r in radii:
-        flux_, ap = irsf.lib.photom(stack, pos, r, r_in=50, r_out=60)
+        flux_, ap, map_area = irsf.lib.photom(stack, pos, r, r_in=50, r_out=60, mode='median')
         flux.append(flux_)
 	
     vmin, vmax = np.percentile(ima.filled().flatten(), (5, 99.9))

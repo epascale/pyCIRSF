@@ -431,18 +431,15 @@ def photom(ima, pos, radius, r_in=False, r_out=False, mode='median'):
         ap.add_column(bkga)
       elif mode == 'median':
 	# Number of pixels in the annulus, a different method
-	fractions = anulus_apertures.get_fractions(ima, method='center')
-	nbkg = fractions.shape[-1] if fractions.ndim == 3 else 1
+	aperture_mask = anulus_apertures.to_mask(method='center')
+	nbkg = len(aperture_mask)
+	
 	# Background mask
 	bkgm = np.zeros(nbkg, dtype=np.float)
 	
-	if bkgm.size == 1:
-	  bmask = ~mask & fractions.astype(np.bool)
-	  bkgm[0] = np.median(ima[bmask])
-	else:	
-	  for i in xrange(bkgm.size):
-	    bmask = ~mask & fractions[..., i].astype(np.bool)
-	    bkgm[i] = np.median(ima[bmask])
+	for i, am in enumerate(aperture_mask):
+	  bmask = ~mask & am.to_image(shape=mask.shape).astype(np.bool)
+	  bkgm[i] = np.median(ima[bmask])
 		
 	flux = flux_init - bkgm*ap_area
 	bkgm = Column(name = 'background', data = bkgm)
