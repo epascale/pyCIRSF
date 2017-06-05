@@ -28,10 +28,16 @@ def get_frames_flags(fname, date, object_name):
     ws_flags     = np.array([c.value for c in ws.columns[14]][1:])
     ws_flags_new = np.array([c.value for c in ws.columns[15]][1:])
     
+    for i in xrange(len(ws_objects)):
+        if isinstance(ws_flags[i], str):
+            ws_flags[i]     = ws_flags[i].replace('=','')
+        if isinstance(ws_flags_new[i], str):
+            ws_flags_new[i] = ws_flags_new[i].replace('=','')
+
     list_ = []
     
     for i in xrange(len(ws_objects)):
-	flag = np.int(ws_flags[i]) | np.int(ws_flags_new[i])
+        flag = np.int(ws_flags[i]) | np.int(ws_flags_new[i])
         if ws_objects[i] == object_name and flag == 0:
             list_.append([np.int(ws_frames[i]), ws_itimes[i], ws_ra_off[i], ws_de_off[i]])
         
