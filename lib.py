@@ -57,15 +57,19 @@ def get_reference_cat(fname=None, Jmag_lim=10.6):
     return cat, coord.Angle(cat['RAJ2000'], u.hour), \
         coord.Angle(cat['DEJ2000'], u.degree)
 
-def get_dark(fname, flag_mask = 0x1|0x4):
+def get_dark(fname, flag_mask = 0x1|0x4, dark_ext = None, mask_ext = None):
     '''
     Read dark frame from fname and returns a masked array
     '''
     
     if not os.path.exists(fname): pycirsf_error('Mask file ({:s}) does not exist'.format(fname))
     hdu = fits.open(fname)
-    ima  = hdu[1].data
-    mask = hdu[2].data
+    if dark_ext and mask_ext:
+      ima  = hdu[dark_ext].data
+      mask = hdu[mask_ext].data
+    else:
+      ima  = hdu[1].data
+      mask = hdu[2].data
     hdu.close()
     
     mask = np.bitwise_and(mask, flag_mask).astype(np.bool)
