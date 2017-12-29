@@ -16,7 +16,7 @@ def pycirsf_error(error_msg):
     sys.exit(0)
 
 def get_frames_flags(fname, date, object_name):
-    wb = load_workbook(fname)
+    wb = load_workbook(os.path.expanduser(fname))
     
     ws = wb[date]
     
@@ -58,7 +58,7 @@ def get_reference_cat(fname=None, Kmag_lim=10.6):
     '''
     if not fname: pycirsf_error('Catalog file name not defined')
         
-    cat = ascii.read(fname, header_start=14, data_start=16)
+    cat = ascii.read(os.path.expanduser(fname), header_start=14, data_start=16)
     cat.sort('Kmag')
     
     idx = np.where(cat['Kmag'] < Kmag_lim)
@@ -71,7 +71,7 @@ def get_dark(fname, flag_mask = 0x1|0x4, dark_ext = None, mask_ext = None):
     '''
     Read dark frame from fname and returns a masked array
     '''
-    
+    fname = os.path.expanduser(fname)
     if not os.path.exists(fname): pycirsf_error('Mask file ({:s}) does not exist'.format(fname))
     hdu = fits.open(fname)
     if dark_ext and mask_ext:
@@ -91,6 +91,7 @@ def get_flat(fname, flag_mask = 0x1|0x4):
     Read dark frame from fname and returns a masked array
     '''
     
+    fname = os.path.expanduser(fname)
     if not os.path.exists(fname): pycirsf_error('Mask file ({:s}) does not exist'.format(fname))
     hdu = fits.open(fname)
     ima  = hdu[0].data
@@ -103,11 +104,27 @@ def get_flat(fname, flag_mask = 0x1|0x4):
     #mask = np.bitwise_and(mask, flag_mask).astype(np.bool)
     
     return ima
+
+
+def apply_linear(ima, band):
+  if band == 'j':
+    par = np.array([-1.52e-19, 4.17e-15, -1.29e-10, 6.96e-07, 1.0])
+  elif band == 'h':
+    par = np.array([-2.50e-19, 1.11e-14, -1.65e-10, 6.96e-07, 1.0])
+  elif band == 'k':
+    par = np.array([-8.56e-19, 2.45e-14, -2.46e-10, 6.96e-07, 1.0])
+  else: 
+    pycirsf_error('apply_linear: no band specified')
     
-def apply_dark_flat(ima, dark=None, flat=None, fillval = 0.0):
+  p = np.poly1d(par)
+  return ima/p(ima)
+    
+    
+def apply_dark_flat(ima, dark=None, flat=None, fillval = 0.0, linearity_correction=True, band=None):
     
     ima_ = ima
     
+    if apply_linear: ima_ = apply_linear(ima_, band)
     if isinstance(dark, np.ndarray) : ima_ = ima_ - dark
     if isinstance(flat, np.ndarray):  ima_ = ima_ / flat
     
