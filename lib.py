@@ -481,6 +481,109 @@ def photom(ima, pos, radius, r_in=False, r_out=False, mode='median'):
     ap.add_column(flux)
         
     return ap['flux'], ap, map_area
+    
+def photom_av(ima, pos, radius, r_in=False, r_out=False, mode='median'):
+    '''
+    Aperture photometry in an aperture located at pixel coordinates 
+    pos = ( (x0, y0), (x1, y1), ... ) with a radius=radius.
+    When r_in and r_out are given, background is estimated in CircularAnnulus and subtracted.
+    
+    mode refers to how the background is estimated within the circlar annulus.
+    Can be 'median' or 'mean'
+    
+    Photometry is calculating by median averaging the pixels within the aperture and 
+    multiplying by the number of pixels in the aperture (including fractions of pixels).
+
+    '''
+    # Setting up the mask 
+    if hasattr(ima, 'mask'):
+      if ima.mask.size == 1:
+	mask = np.zeros(ima.shape, dtype=np.bool) | ima.mask
+      else:
+        mask = ima.mask.copy()
+    else:
+        mask = np.zeros(ima.shape, dtype=np.bool)
+        
+        
+    ### Performing the actual photometry - identical for each method
+    # Median averaging of flux in aperture
+    # Setting up the aperture 
+    apertures = CircularAperture(pos, r = radius) 
+    ap_mask = apertures.to_mask(method='center')
+    # Setting up arrays to store data
+    nflx = len(ap_mask)
+    flx = np.zeros(nflx, dtype=np.float)
+    flux_max = np.zeros(nflx, dtype=np.float)
+    flux_min = np.zeros(nflx, dtype=np.float)
+    # Median averaging of flux
+    for i, am in enumerate(ap_mask):
+      fluxmask = ~mask & am.to_image(shape=mask.shape).astype(np.bool)
+      flx[i] = np.median(ima[fluxmask])
+      flux_max[i] = np.max(ima[fluxmask])
+      flux_min[i] = np.min(ima[fluxmask])
+      
+      
+      
+      
+    # Aperture photometry on mask to see how many masked pixels are in the 
+    # aperture
+    apm       = aperture_photometry(mask.astype(int), apertures)
+    # Number of unmasked pixels in aperture
+    ap_area   = Column(name = 'area_aper',
+		       data=apertures.area() - apm['aperture_sum'].data)
+    
+    # Flux in aperture using median av flux and fractional no. pixels in aperture
+    flux_init = flx*ap_area
+    
+
+    ### Two different modes for analysing the background
+    if ( r_in and r_out and mode in ('mean', 'median') ):
+      
+      ### This stuff is the same regardless of method
+      # Setting up the annulus
+      anulus_apertures = CircularAnnulus(pos, r_in=r_in, r_out=r_out)
+      # Performing annulus photometry on the mask
+      bkgm = aperture_photometry(mask.astype(int), anulus_apertures)
+      # Number of masked pixels in bkg
+      mbkg_area = Column(name = 'bpix_bkg',
+			 data=bkgm['aperture_sum'])  
+      # Number of non-masked pixels in aperture and bkg        
+      bkg_area  = Column(name = 'area_bkg',
+			 data=anulus_apertures.area() - bkgm['aperture_sum'])
+      
+      
+      ### This stuff is specific to the mean
+      if mode == 'mean':
+	# Perform the annulus photometry on the image
+	bkg  = aperture_photometry(ima, anulus_apertures, mask=mask)
+        # Average bkg where this divides by only number of NONMASKED pixels
+        # as the aperture photometry ignores the masked pixels
+        bkga = Column(name='background',
+		      data=bkg['aperture_sum']/bkg_area)
+        # Bkg subtracted flux
+        flux = flux_init - bkga*ap_area
+        # Adding that data
+        ap.add_column(bkga)
+        
+        
+      elif mode == 'median':
+	# Number of pixels in the annulus, a different method
+	aperture_mask = anulus_apertures.to_mask(method='center')
+	nbkg = len(aperture_mask)
+	
+	# Background mask
+	bkgm = np.zeros(nbkg, dtype=np.float)
+	
+	# Median averaging
+	for i, am in enumerate(aperture_mask):
+	  bmask = ~mask & am.to_image(shape=mask.shape).astype(np.bool)
+	  bkgm[i] = np.median(ima[bmask])
+		
+	flux = flux_init - bkgm*ap_area
+	bkgm = Column(name = 'background', data = bkgm)
+
+        
+    return flux, apm, flx, ap_area, flux_max, flux_min #flux, no.masked pixels in ap, median av flux
 
 # Find the nearest value to a number, return x and y 
 def find_nearest(ydata, xdata, yvalue):
