@@ -37,10 +37,10 @@ def get_frames_flags(fname, date, object_name):
     list_ = []
   
     for i in xrange(len(ws_objects)):
-	if ws_flags[i] == None or ws_flags_new[i] == None: 
-	  ws_flags[i] = 0; ws_flags_new[i] = 0
-	  warnings.warn("Undefined flags, forcing flag to zero")
-	  
+        if ws_flags[i] == None or ws_flags_new[i] == None: 
+          ws_flags[i] = 0; ws_flags_new[i] = 0
+          warnings.warn("Undefined flags, forcing flag to zero")
+        
         flag = np.int(ws_flags[i]) | np.int(ws_flags_new[i])
         if ws_objects[i] == object_name and flag == 0:
             list_.append([np.int(ws_frames[i]), ws_itimes[i], ws_ra_off[i], ws_de_off[i]])
@@ -86,22 +86,21 @@ def get_dark(fname, flag_mask = 0x1|0x4, dark_ext = None, mask_ext = None):
     
     return np.ma.array(ima, mask=mask)
 
-def get_flat(fname, flag_mask = 0x1|0x4):
+def get_flat(fname, sigma = 5.0):
     '''
-    Read dark frame from fname and returns a masked array
+    Read dark frame from fname and returns a masked array. 
+    Pixels sigma-clipped above sigma are masked.
     '''
     
     fname = os.path.expanduser(fname)
-    if not os.path.exists(fname): pycirsf_error('Mask file ({:s}) does not exist'.format(fname))
+    if not os.path.exists(fname): pycirsf_error('File ({:s}) does not exist'.format(fname))
     hdu = fits.open(fname)
     ima  = hdu[0].data
     
-    ima = sigma_clip(ima, sigma = 5.0)
+    ima = sigma_clip(ima, sigma = sigma)
     
-    #mask = hdu[2].data
     hdu.close()
     
-    #mask = np.bitwise_and(mask, flag_mask).astype(np.bool)
     
     return ima
 
@@ -120,7 +119,7 @@ def apply_linear(ima, band):
   return ima/p(ima)
     
     
-def apply_dark_flat(ima, dark=None, flat=None, fillval = 0.0, linearity_correction=True, band=None):
+def apply_dark_flat(ima, dark=None, flat=None, fillval = np.nan, linearity_correction=True, band=None):
     
     ima_ = ima
     
