@@ -63,7 +63,7 @@ def photom(ima, pos, radius, r_in=None, r_out=None, method='median'):
                                method='bounded')
         bg_val=mode.x[0]
         
-        if True:
+        if False:
           median = np.ma.median(bg_ima)
           h, b = np.histogram(bg_ima.data[~bg_ima.mask], bins=15, normed=True)
           bc = 0.5*(b[1:]+ b[:-1])
