@@ -12,6 +12,8 @@ from scipy.optimize import minimize_scalar
 import pyCIRSF as irsf
 import os, glob, sys#, mylib
 
+import time as time_ 
+
 
 #######################################################
 def photom(ima, pos, radius, r_in=None, r_out=None, method='median'):
@@ -122,104 +124,128 @@ file_open_mode = 'w'
 file_format = 'ascii'
 
 #aperture photometry params
-r_ap    = 5.0
+r_ap    = 4.5
 r_in    = 15
 r_out   = 24
 method  = 'mode'
 
-#centroid method
-x,y     = centroid_method('2dGauss')
+r_ap_list = [3.5,4.5, 5.0, 10]
+method_list = ['mode', 'median']
 
+for method in method_list:
+    print '\nMethod ' + method
 
-#__root__ = "~/gdrive/WorkV2/IRSF/Observations 2017"
-__root__ = "~/Documenti/gdrive/WorkV2/IRSF/Observations 2017"
-photom_output_dir = 'data/photometry_180115'
+    for r_ap in r_ap_list:
+        print '\nRadius ' + str(r_ap)
+        #centroid method
+        x,y     = centroid_method('2dGauss')
+        
+        
+        #__root__ = "~/gdrive/WorkV2/IRSF/Observations 2017"
+        __root__ = "~/Documenti/gdrive/WorkV2/IRSF/Observations 2017"
+        photom_output_dir = 'data/photometry_180115'
+        
+        workbook_fn = os.path.join(__root__,  'obslog_2017_jeni.xlsx')
+        
+        flat_fn = os.path.join('data/flats/new_flats', '{:s}{:s}flat.fits'.format(band, flat_type))
+        flat = irsf.lib.get_flat(os.path.join(__root__, flat_fn), sigma=5.0)
+        
+        #fignum = 31415; plt.ion(); fig = plt.figure(fignum); plt.clf()
+        #fig, ax0 = plt.subplots(nrows = 1, ncols = 1, num=fignum)
+        
+        
+        for date in dates:
+          print "\nDate " + date
+        #1# read frames
+          raw_data_path = os.path.join(__root__, 'data', 'raw', date, 'rawdata')
+          fr_tab = irsf.lib.get_frames_flags(os.path.expanduser(workbook_fn), 
+                                             date, object_name)
+        #2# read dark frame
+          for which_dark in ('as', 'bs'):    
+            dark_fn = os.path.join(__root__, 'data/darks', object_name,
+                                  date,
+                                  'dark_masked_{:s}_{:s}_{:s}.fits.fz'.format(band, date, which_dark))
+            if os.path.isfile(os.path.expanduser(dark_fn)): 
+              dark = irsf.lib.get_dark(dark_fn, 
+                                       flag_mask=0x1, dark_ext = 1, mask_ext = 2)
+          
+              break
+          
+        #progress bar init
+          width = 30
+          iter_ = 1
+          start_time = time_.time()
 
-workbook_fn = os.path.join(__root__,  'obslog_2017_jeni.xlsx')
-
-flat_fn = os.path.join('data/flats/new_flats', '{:s}{:s}flat.fits'.format(band, flat_type))
-flat = irsf.lib.get_flat(os.path.join(__root__, flat_fn), sigma=5.0)
-
-fignum = 31415; plt.ion(); fig = plt.figure(fignum); plt.clf()
-fig, ax0 = plt.subplots(nrows = 1, ncols = 1, num=fignum)
-
-
-for date in dates:
-  print "\nDate " + date
-#1# read frames
-  raw_data_path = os.path.join(__root__, 'data', 'raw', date, 'rawdata')
-  fr_tab = irsf.lib.get_frames_flags(os.path.expanduser(workbook_fn), 
-                                     date, object_name)
-#2# read dark frame
-  for which_dark in ('as', 'bs'):    
-    dark_fn = os.path.join(__root__, 'data/darks', object_name,
-                          date,
-                          'dark_masked_{:s}_{:s}_{:s}.fits.fz'.format(band, date, which_dark))
-    if os.path.isfile(os.path.expanduser(dark_fn)): 
-      dark = irsf.lib.get_dark(dark_fn, 
-                               flag_mask=0x1, dark_ext = 1, mask_ext = 2)
-  
-      break
-    
-  for fr in fr_tab['Frame']:
-    print "Frame {:04d} \r".format(fr),
-#3# read sci frame
-    raw_fn = os.path.expanduser(os.path.join(raw_data_path,
-              '{:s}{:s}_{:04d}.fits.fz'.format(band, date, fr)))
-    
-    hdulist = fits.open(raw_fn) 
-    hdr = hdulist[1].header
-    ima = irsf.lib.apply_dark_flat(np.ma.array(hdulist[1].data), 
-                  dark=dark, flat=flat, linearity_correction=True, band=band)
-    hdulist.close()
-
-#4# interpolate over hot pixels
-#    kernel = Box2DKernel(3, mode='center')
-#    ima_ = interpolate_replace_nans(ima.filled(), kernel)
-#    ima = np.ma.array(ima_, mask=np.isnan(ima_))
-    #dsds
-#4# read positions
-    sourcelist_fn = os.path.expanduser(os.path.join(__root__, "data/sources",
-                                 "{:s}{:s}_{:04d}_sources.dat".format(band, date, fr)))
-    
-    if not os.path.isfile(sourcelist_fn): continue
-    source_list = ascii.read(sourcelist_fn, header_start=0, comment='=')
-    
-    positions = np.asanyarray(source_list[x, y]).tolist()
-
-#interpolate over bad pixels in apertures
-    ima = interpolate_replace(ima, positions, r_out)
-
-#5# perform photometry
-    id_ = np.asanyarray(source_list['2MASS']).tolist()
-    photometry, itmp = photom(ima, positions, r_ap , r_in = r_in, r_out=r_out, method=method)
-    photometry.add_column(Column(data=id_, name = '2MASS'))
-
-    info_names = ['DATE','Frame', 'Band', 'MJD', 'EXPOS', 'Airmass', 'Humidity', 'Pressure', 'Aperture', 'method']
-    info_dtype = ['S6',  'i4' , 'S1',  np.float,  np.float,  np.float,  np.float,  np.float, np.float, 'S10']
-    info_table = Table(names = info_names, dtype = info_dtype)
-    info_table.add_row((date, fr, band, hdr['MJD'], hdr['EXPOS'], hdr['AIRMASS'], hdr['HUMIDITY'], hdr['PRESSURE'], r_ap, method))
-
-    for source in source_list:
-      with open(os.path.join(os.path.expanduser(__root__),photom_output_dir, source['2MASS']+'_'+method+'_r'+str(r_ap)), 
-                file_open_mode) as fs:
-        keys = ['2MASS', x, y]
-        names = ['2MASS', 'X', 'Y']
-        output_table = Table([[source[key]] for key in keys], names=names)
-        phot_keys = [ 'Flux', 'aperture_sum', 'aperture_area', 'aperture_badpix', 'background']
-        for i in info_names:
-            output_table.add_column(Column(data = info_table[i], name = i))
-        for k in phot_keys:
-            output_table.add_column(Column(data=photometry[k][np.where(photometry['2MASS']==source['2MASS'])[0]], name = k))
-        output_table.write(fs, format=file_format, delimiter=',')
-
-    file_open_mode = 'a'
-    file_format = 'ascii.no_header'
+          for fr in fr_tab['Frame']:
+ #           print "Frame {:04d} \r".format(fr),
+        #3# read sci frame
+            raw_fn = os.path.expanduser(os.path.join(raw_data_path,
+                      '{:s}{:s}_{:04d}.fits.fz'.format(band, date, fr)))
+            
+            hdulist = fits.open(raw_fn) 
+            hdr = hdulist[1].header
+            ima = irsf.lib.apply_dark_flat(np.ma.array(hdulist[1].data), 
+                          dark=dark, flat=flat, linearity_correction=True, band=band)
+            hdulist.close()
+        
+        #4# interpolate over hot pixels
+        #    kernel = Box2DKernel(3, mode='center')
+        #    ima_ = interpolate_replace_nans(ima.filled(), kernel)
+        #    ima = np.ma.array(ima_, mask=np.isnan(ima_))
+            #dsds
+        #4# read positions
+            sourcelist_fn = os.path.expanduser(os.path.join(__root__, "data/sources",
+                                         "{:s}{:s}_{:04d}_sources.dat".format(band, date, fr)))
+            
+            if not os.path.isfile(sourcelist_fn): continue
+            source_list = ascii.read(sourcelist_fn, header_start=0, comment='=')
+            
+            positions = np.asanyarray(source_list[x, y]).tolist()
+        
+        #interpolate over bad pixels in apertures
+            ima = interpolate_replace(ima, positions, r_out)
+        
+        #5# perform photometry
+            id_ = np.asanyarray(source_list['2MASS']).tolist()
+            photometry, itmp = photom(ima, positions, r_ap , r_in = r_in, r_out=r_out, method=method)
+            photometry.add_column(Column(data=id_, name = '2MASS'))
+        
+            info_names = ['DATE','Frame', 'Band', 'MJD', 'EXPOS', 'Airmass', 'Humidity', 'Pressure', 'Aperture', 'method']
+            info_dtype = ['S6',  'i4' , 'S1',  np.float,  np.float,  np.float,  np.float,  np.float, np.float, 'S10']
+            info_table = Table(names = info_names, dtype = info_dtype)
+            info_table.add_row((date, fr, band, hdr['MJD'], hdr['EXPOS'], hdr['AIRMASS'], hdr['HUMIDITY'], hdr['PRESSURE'], r_ap, method))
+        
+            for source in source_list:
+              with open(os.path.join(os.path.expanduser(__root__),photom_output_dir, source['2MASS']+'_'+method+'_r'+str(r_ap)), 
+                        file_open_mode) as fs:
+                keys = ['2MASS', x, y]
+                names = ['2MASS', 'X', 'Y']
+                output_table = Table([[source[key]] for key in keys], names=names)
+                phot_keys = [ 'Flux', 'aperture_sum', 'aperture_area', 'aperture_badpix', 'background']
+                for i in info_names:
+                    output_table.add_column(Column(data = info_table[i], name = i))
+                for k in phot_keys:
+                    output_table.add_column(Column(data=photometry[k][np.where(photometry['2MASS']==source['2MASS'])[0]], name = k))
+                output_table.write(fs, format=file_format, delimiter=',')
+        
+            file_open_mode = 'a'
+            file_format = 'ascii.no_header'
+            
+        #progressbar for date
+            n = int((width+1) * float(iter_) / len(fr_tab['Frame']))
+            delta_t = time_.time()-start_time# time to do float(i) / n_steps % of caluculations
+            time_incr = delta_t/(float(iter_+1) / len(fr_tab['Frame'])) # seconds per increment
+            time_left = time_incr*(1- float(iter_) / len(fr_tab['Frame']))
+            m, s = divmod(time_left, 60)
+            h, m = divmod(m, 60)
+            sys.stdout.write('\r[{0}{1}] {2}% - Frame {3} - {4}h:{5}m:{6:.2f}s'.format('-' * n, ' ' * (width - n), 
+                                 round(100*float(iter_) / len(fr_tab['Frame']),2) ,fr,int(h),int(m),s))
+            iter_+=1
 
 # # combile table
     
-    vmin, vmax = np.percentile(ima.flatten(), (5, 99.))
-    im = ax0.imshow(ima.filled(), interpolation='none', cmap='gist_heat', 
-                   vmin=vmin, vmax=vmax, origin='lower')
-    ax0.format_coord = irsf.lib.Formatter(im)
-    ax0.grid() 
+#    vmin, vmax = np.percentile(ima.flatten(), (5, 99.))
+#    im = ax0.imshow(ima.filled(), interpolation='none', cmap='gist_heat', 
+#                   vmin=vmin, vmax=vmax, origin='lower')
+#    ax0.format_coord = irsf.lib.Formatter(im)
+#    ax0.grid() 
