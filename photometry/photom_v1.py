@@ -86,7 +86,7 @@ def photom(ima, pos, radius, r_in=None, r_out=None, method='median'):
     ap['Flux'] = ap['Flux'] - ap['aperture_area']*ap['background']
     return ap, bg_ima
 
-def interpolate_replace(ima, pos, size = 10):
+def interpolate_replace(ima, pos, size = 20):
     kernel = Box2DKernel(3, mode='center')
     ima_ = ima
     for x,y in pos:
@@ -113,45 +113,47 @@ def centroid_method(method):
     return x,y
 ##################################################################
 
-#dates       = ['170420', '170428']
+#dates       = ['170409', '170428']
 dates       = ['170409', '170410', '170411', '170415', '170416', '170417', 
              '170418', '170419', '170420', '170421', '170422', '170424', 
              '170428', '170501', '170502']
 band        = 'k'
 flat_type   = 'c'
 object_name = 'WASP-103'
-file_open_mode = 'w'
-file_format = 'ascii'
+file_open_mode_ = 'w'
+file_format_ = 'ascii'
 
 #aperture photometry params
-r_ap    = 4.5
-r_in    = 15
-r_out   = 24
-method  = 'mode'
-
-r_ap_list = [3.5,4.5, 5.0, 10]
+r_in        = 15
+r_out       = 24
+r_ap_list   = [3.5,4.5, 5.0, 10]
 method_list = ['mode', 'median']
+
+
+#centroid method
+x,y         = centroid_method('2dGauss')
+
+
+#__root__ = "~/gdrive/WorkV2/IRSF/Observations 2017"
+__root__ = "~/Documenti/gdrive/WorkV2/IRSF/Observations 2017"
+photom_output_dir = 'data/photometry_180115'
+
+workbook_fn = os.path.join(__root__,  'obslog_2017_jeni.xlsx')
+
+flat_fn = os.path.join('data/flats/new_flats', '{:s}{:s}flat.fits'.format(band, flat_type))
+flat = irsf.lib.get_flat(os.path.join(__root__, flat_fn), sigma=5.0)
+
+#fignum = 31415; plt.ion(); fig = plt.figure(fignum); plt.clf()
+#fig, ax0 = plt.subplots(nrows = 1, ncols = 1, num=fignum)
 
 for method in method_list:
     print '\nMethod ' + method
 
     for r_ap in r_ap_list:
         print '\nRadius ' + str(r_ap)
-        #centroid method
-        x,y     = centroid_method('2dGauss')
         
-        
-        #__root__ = "~/gdrive/WorkV2/IRSF/Observations 2017"
-        __root__ = "~/Documenti/gdrive/WorkV2/IRSF/Observations 2017"
-        photom_output_dir = 'data/photometry_180115'
-        
-        workbook_fn = os.path.join(__root__,  'obslog_2017_jeni.xlsx')
-        
-        flat_fn = os.path.join('data/flats/new_flats', '{:s}{:s}flat.fits'.format(band, flat_type))
-        flat = irsf.lib.get_flat(os.path.join(__root__, flat_fn), sigma=5.0)
-        
-        #fignum = 31415; plt.ion(); fig = plt.figure(fignum); plt.clf()
-        #fig, ax0 = plt.subplots(nrows = 1, ncols = 1, num=fignum)
+        file_format = file_format_
+        file_open_mode = file_open_mode_
         
         
         for date in dates:
