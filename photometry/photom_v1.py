@@ -126,7 +126,7 @@ file_format_ = 'ascii'
 #aperture photometry params
 r_in        = 15
 r_out       = 24
-r_ap_list   = [3.5,4.5, 5.0, 10]
+r_ap_list   = [3.5, 4.5, 5.0, 10]
 method_list = ['mode', 'median']
 
 
