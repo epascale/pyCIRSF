@@ -1,2 +1,2 @@
-from lib import *
-from medianfilter import *
+from .lib import *
+from .medianfilter import *

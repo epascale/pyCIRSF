@@ -11,24 +11,34 @@ from openpyxl import load_workbook
 import sys, os, warnings
 
 
+__wb__ = None # this is a work around, not elegant and prone to bugs. It should
+              # take into account that user can call get_frames_flag from different
+              # excel files. This implementation does not allow this.
+
 def pycirsf_error(error_msg):
     sys.stderr.write("Error code: {:s}\n".format(error_msg))
     sys.exit(0)
 
 def get_frames_flags(fname, date, object_name):
-    wb = load_workbook(os.path.expanduser(fname))
+    global __wb__
     
+    if __wb__: 
+      wb = __wb__
+    else:
+      wb = load_workbook(os.path.expanduser(fname))
+      __wb__ = wb
+      
     ws = wb[date]
+  
+    ws_frames    = np.array([c.value for c in ws['A']][1:])
+    ws_objects   =          [c.value for c in ws['B']][1:]
+    ws_itimes    = np.array([c.value for c in ws['C']][1:])
+    ws_ra_off    = np.array([c.value for c in ws['D']][1:])
+    ws_de_off    = np.array([c.value for c in ws['E']][1:])
+    ws_flags     = np.array([c.value for c in ws['O']][1:])
+    ws_flags_new = np.array([c.value for c in ws['P']][1:])
     
-    ws_frames    = np.array([c.value for c in ws.columns[ 0]][1:])
-    ws_objects   =          [c.value for c in ws.columns[ 1]][1:]
-    ws_itimes    = np.array([c.value for c in ws.columns[ 2]][1:])
-    ws_ra_off    = np.array([c.value for c in ws.columns[ 3]][1:])
-    ws_de_off    = np.array([c.value for c in ws.columns[ 4]][1:])
-    ws_flags     = np.array([c.value for c in ws.columns[14]][1:])
-    ws_flags_new = np.array([c.value for c in ws.columns[15]][1:])
-    
-    for i in xrange(len(ws_objects)):
+    for i in range(len(ws_objects)):
         if isinstance(ws_flags[i], str):
             ws_flags[i]     = ws_flags[i].replace('=','')
         if isinstance(ws_flags_new[i], str):
@@ -36,7 +46,7 @@ def get_frames_flags(fname, date, object_name):
 
     list_ = []
   
-    for i in xrange(len(ws_objects)):
+    for i in range(len(ws_objects)):
         if ws_flags[i] == None or ws_flags_new[i] == None: 
           ws_flags[i] = 0; ws_flags_new[i] = 0
           warnings.warn("Undefined flags, forcing flag to zero")
@@ -274,7 +284,7 @@ def stacking(ima, xc, yc, N = 31, remove_background=True, method='mean'):
         xx_ = np.int(xx); yy_ = np.int(yy)
         stamp_ = ima_[-N//2+1+yy_:N//2+1+yy_, -N//2+1+xx_:N//2+1+xx_]
         if stamp_.shape[0] == N and stamp_.shape[1] == N :
-	  stamp.append( stamp_ )
+          stamp.append( stamp_ )
     
     if method=='mean':
       stamp = np.ma.array(stamp).mean(axis=0)
@@ -408,7 +418,7 @@ def photom(ima, pos, radius, r_in=False, r_out=False, mode='median'):
     # Setting up the mask 
     if hasattr(ima, 'mask'):
       if ima.mask.size == 1:
-	mask = np.zeros(ima.shape, dtype=np.bool) | ima.mask
+        mask = np.zeros(ima.shape, dtype=np.bool) | ima.mask
       else:
         mask = ima.mask.copy()
     else:
@@ -425,7 +435,7 @@ def photom(ima, pos, radius, r_in=False, r_out=False, mode='median'):
     map_area  = Column(name='bpix_aper', data= apm['aperture_sum'].data)   
     # Number of unmasked pixels in aperture
     ap_area   = Column(name = 'area_aper',
-			    data=apertures.area() - apm['aperture_sum'].data)
+                       data=apertures.area() - apm['aperture_sum'].data)
     # Flux of pixels
     flux_init      = Column(name = 'flux', data=ap['aperture_sum'].data)
         
@@ -449,8 +459,8 @@ def photom(ima, pos, radius, r_in=False, r_out=False, mode='median'):
       
       ### This stuff is specific to the mean
       if mode == 'mean':
-	# Perform the annulus photometry on the image
-	bkg  = aperture_photometry(ima, anulus_apertures, mask=mask)
+        # Perform the annulus photometry on the image
+        bkg  = aperture_photometry(ima, anulus_apertures, mask=mask)
         # Average bkg where this divides by only number of NONMASKED pixels
         # as the aperture photometry ignores the masked pixels
         bkga = Column(name='background',
@@ -460,20 +470,20 @@ def photom(ima, pos, radius, r_in=False, r_out=False, mode='median'):
         # Adding that data
         ap.add_column(bkga)
       elif mode == 'median':
-	# Number of pixels in the annulus, a different method
-	aperture_mask = anulus_apertures.to_mask(method='center')
-	nbkg = len(aperture_mask)
+        # Number of pixels in the annulus, a different method
+        aperture_mask = anulus_apertures.to_mask(method='center')
+        nbkg = len(aperture_mask)
+        
+        # Background mask
+        bkgm = np.zeros(nbkg, dtype=np.float)
 	
-	# Background mask
-	bkgm = np.zeros(nbkg, dtype=np.float)
-	
-	for i, am in enumerate(aperture_mask):
-	  bmask = ~mask & am.to_image(shape=mask.shape).astype(np.bool)
-	  bkgm[i] = np.median(ima[bmask])
-		
-	flux = flux_init - bkgm*ap_area
-	bkgm = Column(name = 'background', data = bkgm)
-	ap.add_column(bkgm)
+        for i, am in enumerate(aperture_mask):
+          bmask = ~mask & am.to_image(shape=mask.shape).astype(np.bool)
+          bkgm[i] = np.median(ima[bmask])
+        
+        flux = flux_init - bkgm*ap_area
+        bkgm = Column(name = 'background', data = bkgm)
+        ap.add_column(bkgm)
           
     ap.add_column(ap_area)
     ap.add_column(map_area)
@@ -497,7 +507,7 @@ def photom_av(ima, pos, radius, r_in=False, r_out=False, mode='median'):
     # Setting up the mask 
     if hasattr(ima, 'mask'):
       if ima.mask.size == 1:
-	mask = np.zeros(ima.shape, dtype=np.bool) | ima.mask
+        mask = np.zeros(ima.shape, dtype=np.bool) | ima.mask
       else:
         mask = ima.mask.copy()
     else:
@@ -529,7 +539,7 @@ def photom_av(ima, pos, radius, r_in=False, r_out=False, mode='median'):
     apm       = aperture_photometry(mask.astype(int), apertures)
     # Number of unmasked pixels in aperture
     ap_area   = Column(name = 'area_aper',
-		       data=apertures.area() - apm['aperture_sum'].data)
+                      data=apertures.area() - apm['aperture_sum'].data)
     
     # Flux in aperture using median av flux and fractional no. pixels in aperture
     flux_init = flx*ap_area
@@ -545,20 +555,20 @@ def photom_av(ima, pos, radius, r_in=False, r_out=False, mode='median'):
       bkgm = aperture_photometry(mask.astype(int), anulus_apertures)
       # Number of masked pixels in bkg
       mbkg_area = Column(name = 'bpix_bkg',
-			 data=bkgm['aperture_sum'])  
+                         data=bkgm['aperture_sum'])  
       # Number of non-masked pixels in aperture and bkg        
       bkg_area  = Column(name = 'area_bkg',
-			 data=anulus_apertures.area() - bkgm['aperture_sum'])
+                         data=anulus_apertures.area() - bkgm['aperture_sum'])
       
       
       ### This stuff is specific to the mean
       if mode == 'mean':
-	# Perform the annulus photometry on the image
-	bkg  = aperture_photometry(ima, anulus_apertures, mask=mask)
+        # Perform the annulus photometry on the image
+        bkg  = aperture_photometry(ima, anulus_apertures, mask=mask)
         # Average bkg where this divides by only number of NONMASKED pixels
         # as the aperture photometry ignores the masked pixels
         bkga = Column(name='background',
-		      data=bkg['aperture_sum']/bkg_area)
+                      data=bkg['aperture_sum']/bkg_area)
         # Bkg subtracted flux
         flux = flux_init - bkga*ap_area
         # Adding that data
@@ -566,20 +576,20 @@ def photom_av(ima, pos, radius, r_in=False, r_out=False, mode='median'):
         
         
       elif mode == 'median':
-	# Number of pixels in the annulus, a different method
-	aperture_mask = anulus_apertures.to_mask(method='center')
-	nbkg = len(aperture_mask)
-	
-	# Background mask
-	bkgm = np.zeros(nbkg, dtype=np.float)
-	
-	# Median averaging
-	for i, am in enumerate(aperture_mask):
-	  bmask = ~mask & am.to_image(shape=mask.shape).astype(np.bool)
-	  bkgm[i] = np.median(ima[bmask])
-		
-	flux = flux_init - bkgm*ap_area
-	bkgm = Column(name = 'background', data = bkgm)
+        # Number of pixels in the annulus, a different method
+        aperture_mask = anulus_apertures.to_mask(method='center')
+        nbkg = len(aperture_mask)
+        
+        # Background mask
+        bkgm = np.zeros(nbkg, dtype=np.float)
+        
+        # Median averaging
+        for i, am in enumerate(aperture_mask):
+          bmask = ~mask & am.to_image(shape=mask.shape).astype(np.bool)
+          bkgm[i] = np.median(ima[bmask])
+        
+        flux = flux_init - bkgm*ap_area
+        bkgm = Column(name = 'background', data = bkgm)
 
         
     return flux, apm, flx, ap_area, flux_max, flux_min #flux, no.masked pixels in ap, median av flux
