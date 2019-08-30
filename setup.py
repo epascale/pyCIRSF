@@ -37,5 +37,5 @@ def configuration(parent_package='', top_path=None):
 
 
 if __name__ == '__main__':
-    print 'Run: python setup.py build_ext'
+    print('Run: python setup.py build_ext')
     setup(configuration=configuration)

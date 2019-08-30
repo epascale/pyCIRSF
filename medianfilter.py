@@ -1,6 +1,6 @@
 import numpy as np
 from scipy.interpolate import interp2d, RectBivariateSpline
-import medfilt
+import pyCIRSF.medfilt as medfilt
 
 
 
@@ -8,11 +8,20 @@ import medfilt
 
 def medfilt2d(ima, mask=None, wy = 3, wx = 3, step = 1, kind='cubic'):
     # Copy image and set up mask if none there
-    _ima = ima.copy()
-    if  mask is None: 
-      _mask = np.zeros(_ima.shape, dtype=np.bool)
+    
+    if hasattr(ima, "filled"):
+      _ima = ima.filled().copy()
     else:
-      _mask = mask.copy()
+      _ima = ima.copy()
+    
+    _mask = np.zeros(_ima.shape, dtype=np.bool)
+    
+    if hasattr(ima, 'mask'):
+      _mask = np.logical_or(_mask, ima.mask)
+    
+    if not mask is None:
+      _mask = np.logical_or(_mask, mask)
+      
       
     if step <= 0: raise ValueError('invalid step value')
     # Perform median filtering (reduces noise)
@@ -40,29 +49,29 @@ def remove_background(ima, source_x=None, source_y=None, source_r=None, wx=64, w
 
     if hasattr(_ima, 'mask'):
       if _ima.mask.size == 1:
-	_mask = np.zeros(ima.shape, dtype=np.bool) | ima.mask
-	_ima = np.ma.array(_ima, mask=_mask)
+        _mask = np.zeros(ima.shape, dtype=np.bool) | ima.mask
+        _ima = np.ma.array(_ima, mask=_mask)
     else:
-	_mask = np.zeros(ima.shape, dtype=np.bool)
-	_ima = np.ma.array(_ima, mask=_mask)
+        _mask = np.zeros(ima.shape, dtype=np.bool)
+        _ima = np.ma.array(_ima, mask=_mask)
     
     if not (source_x is None or source_y is None or source_r is None):
       source_mask = np.zeros( _ima.shape, dtype=bool )
       
       for x, y in zip(np.round(source_x).astype(int), np.round(source_y).astype(int)):
-	source_mask[y - source_r:y+source_r+1,x - source_r:x+source_r+1] = True
-	_ima.mask |= source_mask
+        source_mask[y - source_r:y+source_r+1,x - source_r:x+source_r+1] = True
+        _ima.mask |= source_mask
     
     # Model background by splitting image into two halves (L and R)  
     nx = ima.shape[1]
     bkg1 = medfilt2d(_ima.filled()[..., :nx//2], mask=_ima.mask[..., :nx//2], 
-					wx=wx, wy=wy, step=step)
+                                        wx=wx, wy=wy, step=step)
     bkg2 = medfilt2d(_ima.filled()[..., nx//2:], mask=_ima.mask[..., nx//2:], 
-					wx=wx, wy=wy, step=step)
+                                        wx=wx, wy=wy, step=step)
     # Put halves back together
     background = np.ma.array(np.hstack( (bkg1, bkg2) ), 
-			      mask=ima.mask,
-			      fill_value=ima.fill_value) 
+                              mask=ima.mask,
+                              fill_value=ima.fill_value) 
     return ima-background, background
   
 

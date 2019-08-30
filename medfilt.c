@@ -14,6 +14,8 @@ static PyMethodDef _medfilt[] = {
 };
 
 
+
+
 int  not_doublematrix(PyArrayObject *mat)  {
 	if (PyArray_TYPE(mat) != NPY_DOUBLE || PyArray_NDIM(mat) != 2)  {
 		PyErr_SetString(PyExc_ValueError,
@@ -118,7 +120,7 @@ static PyObject *medfilt2d(PyObject *self, PyObject *args)
                 }
             }
             if (n < 3) {
-	      cout[i*nx + j] = INFINITY;
+	      cout[i*nx + j] = NAN;
 	    } else {
 	      cout[i*nx + j] = nr_select(n/2+1, n, buf-1);
 	    } 
@@ -129,6 +131,31 @@ static PyObject *medfilt2d(PyObject *self, PyObject *args)
     return PyArray_Return(matout);
 }
 
+#if PY_VERSION_HEX >= 0x03000000
+static struct PyModuleDef moduledef = {
+    PyModuleDef_HEAD_INIT,
+    "medfilt",
+    NULL,
+    -1,
+    _medfilt,
+    NULL,
+    NULL,
+    NULL,
+    NULL
+};
+
+PyMODINIT_FUNC PyInit_medfilt(void)
+{
+    PyObject *m;
+    m = PyModule_Create(&moduledef);
+    if (!m) {
+        return NULL;
+    }
+    import_array();
+    return m;
+}
+
+#else
 
 PyMODINIT_FUNC initmedfilt(void)
 {
@@ -140,3 +167,4 @@ PyMODINIT_FUNC initmedfilt(void)
     }
     import_array(); 
 }
+#endif
