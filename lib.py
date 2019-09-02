@@ -133,10 +133,9 @@ def apply_dark_flat(ima, dark=None, flat=None, fillval = np.nan, linearity_corre
     
     ima_ = ima
     
-    if apply_linear: ima_ = apply_linear(ima_, band)
+    if linearity_correction: ima_ = apply_linear(ima_, band)
     if isinstance(dark, np.ndarray) : ima_ = ima_ - dark
     if isinstance(flat, np.ndarray):  ima_ = ima_ / flat
-    
     ima_.set_fill_value(fillval)
     
     return ima_
